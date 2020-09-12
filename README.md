@@ -1,4 +1,4 @@
 # crud
 
-Simple CRUD with simple Jevascript graph database.
+Simple CRUD with simple Javascript graph database.
 
