@@ -1,1 +1,1 @@
-[{"system":"init rel"},{"att":"my rel attribute","gdbid":"a8693777-f4ff-4bd6-b805-6d261268b492","gdbvalid":true,"gdbuser":"Olivier","dgbdate":1599904062529,"gdbs":"6fbd0e59-1f1b-4b5a-bb8a-5f0157f837cf","gdbt":"bc4ea14b-f834-4be5-98bc-c17ad8e4decf"}]
+[{"system":"init rel"},{"id":"54874c8f-44b1-4c02-9088-fa40d40483b5","user":"Olivier","date":1600013684713,"obj":{"att":"my rel attribute","and":"et puis un autre"},"source":"afdf8f04-d633-4faa-9fa7-402459cd7a3c","dest":"3377ac74-27e7-4d1c-9ca8-c36a7a69a51b"}]

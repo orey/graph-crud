@@ -4,7 +4,7 @@
     "description": "Simple mulituser requirements app",
     "main": "index.js",
     "scripts": {
-        "dev": "nodemon server.js",
+        "dev": "nodemon server.js --config nodemon-config.json",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "keywords": [
