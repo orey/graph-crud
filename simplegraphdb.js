@@ -33,10 +33,38 @@ function GraphDB(dbname) {
     //arrays of nodes and rels
     this.nodes = [];
     this.rels = [];
+    this.nodesIndex = new Map();
+    this.relsIndex = new Map();
 }
+
+
+GraphDB.prototype.initNodes(nodes) {
+    this.nodes = nodes
+    recalculateIndex(this.nodes, this.nodesIndex);
+}
+
+
+GraphDB.prototype.initRels(rels) {
+    this.rels = rels
+    recalculateIndex(this.rels, this.relsIndex);
+}
+
 
 GraphDB.prototype.getNodes = () => {return this.nodes;};
 GraphDB.prototype.getRels  = () => {return this.rels;},
+
+
+function recalculateIndex(array, mymap){
+    array.forEach((item, index) => {
+        if (item.gdbid == undefined)
+            if (VERBOSE)
+                console.log("This element will not be indexed (no id): " + item);
+        else
+            mymap.set(item[gdbid], item);} );
+    if (VERBOSE)
+        console.log(mymap);
+}
+
 
 GraphDB.prototype.addNode = function(obj, user) {
     // adding technical info to node
@@ -47,9 +75,30 @@ GraphDB.prototype.addNode = function(obj, user) {
     //adding node to the list
     this.nodes.push(obj);
     if (VERBOSE) console.log("Nb of nodes in memory: "+ this.nodes.length);
+    //recalculate index
+    recalculateIndex(this.nodes, this.nodesIndex);
     //returning node
     return obj.gdbid;
 };
+
+
+/*
+ *  Warning: this clone function clones the data object and not
+ * its prototypes and methods
+ */
+function clone(obj){
+    return JSON.parse(JSON.stringify(obj));
+}
+
+GraphDB.prototype.updateNode = function(gid, user) {
+    // getting node from index
+    let node = this.nodesIndex.get(gid);
+    if (node == undefined)
+        throw new Error ("Unknown node. gdbid = " + gid);
+    // reprendre ici
+    
+};
+
 
 GraphDB.prototype.addRel = function (relatt, obj_source, obj_target, user){
     // creating rel
@@ -69,6 +118,8 @@ GraphDB.prototype.addRel = function (relatt, obj_source, obj_target, user){
     relatt.gdbt = obj_target.gdbid;
     //adding rel to rels
     this.rels.push(relatt);
+    //recalculate index
+    recalculateIndex(this.rels, this.relsIndex);
     return relatt.gdbid;
 };
 
@@ -107,30 +158,37 @@ function getDateMilli(){
 
 
 /*
- * Warning there can be only one DB
+ * TODO: this function should be integrate in the DB object
  */
 function initDatabase(dbn, erase=false, verbose=false){
     VERBOSE = verbose;
     // Create the DB object
     let thedb = new GraphDB(dbn);
     if (VERBOSE) console.log(erase);
+    // file management
     try {
         if ((!(fs.existsSync(thedb.dbnodes))) || erase) {
-            if (VERBOSE) console.log("Creating nodes file: " + thedb.dbnodes);
+            if (VERBOSE)
+                console.log("Creating nodes file: " + thedb.dbnodes);
             fs.writeFileSync(thedb.dbnodes, JSON.stringify(INIT_NODES));
         }
         else
-            if (VERBOSE) console.log("File exists: " + thedb.dbnodes);
+            if (VERBOSE)
+                console.log("File exists: " + thedb.dbnodes);
         if ((!(fs.existsSync(thedb.dbrels))) || erase) {
-            if (VERBOSE) console.log("Creating rels file: " + thedb.dbrels);
+            if (VERBOSE)
+                console.log("Creating rels file: " + thedb.dbrels);
             fs.writeFileSync(thedb.dbrels, JSON.stringify(INIT_RELS));
         }
         else
             if (VERBOSE) console.log("file exists: " + thedb.dbrels);
-        if (VERBOSE) console.log("Loading nodes file: " + thedb.dbnodes);
-        thedb.nodes = JSON.parse(fs.readFileSync(thedb.dbnodes, 'utf8'));
-        if (VERBOSE) console.log("Loading rels file: " + thedb.dbrels);
-        thedb.rels  = JSON.parse(fs.readFileSync(thedb.dbrels,  'utf8'));
+        // nodes management
+        if (VERBOSE)
+            console.log("Loading nodes file: " + thedb.dbnodes);
+        thedb.initNodes(JSON.parse(fs.readFileSync(thedb.dbnodes, 'utf8')));
+        if (VERBOSE)
+            console.log("Loading rels file: " + thedb.dbrels);
+        thedb.initRels (JSON.parse(fs.readFileSync(thedb.dbrels,  'utf8')));
     }
     catch(err){
         console.error(err);
