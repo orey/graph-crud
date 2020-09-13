@@ -3,7 +3,7 @@ const bodyParser= require('body-parser');
 const fs = require('fs');
 
 const graph = require('./simplegraphdb.js');
-const gdb = graph.initDatabase("web", false, true);
+const gdb = new graph.GraphDB("web", false, true);
 
 const app = express();
 

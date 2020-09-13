@@ -23,29 +23,77 @@ const NOT_A_NODE = "Source object is not a node (missing gdbid). Not written.";
 
 let VERBOSE = false;
 
-function GraphDB(dbname) {
-    //files
+/*------------------------------------*/
+
+function recalculateIndex(array, mymap){
+    if (VERBOSE) {
+        let len = array.length;
+        if (len=0) {
+            console.out("New file");
+            return;
+        }
+        else
+            console.out("Index: Number of elements in source array: " + len.toString());
+    }
+    array.forEach((item, index) => {
+        if (item.gdbid == undefined)
+            if (VERBOSE)
+                console.log("This element will not be indexed (no id): " + item);
+        else
+            mymap.set(item["gdbid"], item);} );
+    if (VERBOSE) 
+        console.log("Index length: " + mymap.length);
+}
+
+/*------------------------------------*/
+
+/*
+ * Constructor
+ */
+function GraphDB(dbname, erase=false,verbose=false) {
+    // files
     this.dbname = dbname;
+    // creating complete filenames
     this.dbnodes = __dirname + '/db/' + dbname + NODES;
     if (VERBOSE) console.log("dbnodes: " + this.dbnodes);
     this.dbrels  = __dirname + '/db/' + dbname + RELS;
     if (VERBOSE) console.log("dbrels: " + this.dbrels);
-    //arrays of nodes and rels
+    // arrays of nodes and rels
     this.nodes = [];
     this.rels = [];
+    // init indexes
     this.nodesIndex = new Map();
     this.relsIndex = new Map();
-}
-
-
-GraphDB.prototype.initNodes(nodes) {
-    this.nodes = nodes
+    // file management
+    try {
+        // create new DB
+        if ((!(fs.existsSync(this.dbnodes))) || erase) {
+            if (VERBOSE)
+                console.log("Creating nodes file: " + this.dbnodes);
+            fs.writeFileSync(this.dbnodes, JSON.stringify(INIT_NODES));
+        }
+        else
+            if (VERBOSE)
+                console.log("File exists: " + this.dbnodes);
+        if ((!(fs.existsSync(this.dbrels))) || erase) {
+            if (VERBOSE)
+                console.log("Creating rels file: " + this.dbrels);
+            fs.writeFileSync(this.dbrels, JSON.stringify(INIT_RELS));
+        }
+        else
+            if (VERBOSE) console.log("file exists: " + this.dbrels);
+    }
+    catch(err){
+        console.error(err);
+    }   
+    // nodes management
+    if (VERBOSE)
+        console.log("Loading nodes file: " + this.dbnodes);
+    this.nodes = JSON.parse(fs.readFileSync(this.dbnodes, 'utf8'));
     recalculateIndex(this.nodes, this.nodesIndex);
-}
-
-
-GraphDB.prototype.initRels(rels) {
-    this.rels = rels
+    if (VERBOSE)
+        console.log("Loading rels file: " + this.dbrels);
+    this.rels = JSON.parse(fs.readFileSync(this.dbrels,  'utf8'));
     recalculateIndex(this.rels, this.relsIndex);
 }
 
@@ -54,16 +102,6 @@ GraphDB.prototype.getNodes = () => {return this.nodes;};
 GraphDB.prototype.getRels  = () => {return this.rels;},
 
 
-function recalculateIndex(array, mymap){
-    array.forEach((item, index) => {
-        if (item.gdbid == undefined)
-            if (VERBOSE)
-                console.log("This element will not be indexed (no id): " + item);
-        else
-            mymap.set(item[gdbid], item);} );
-    if (VERBOSE)
-        console.log(mymap);
-}
 
 
 GraphDB.prototype.addNode = function(obj, user) {
@@ -157,51 +195,10 @@ function getDateMilli(){
 }
 
 
-/*
- * TODO: this function should be integrate in the DB object
- */
-function initDatabase(dbn, erase=false, verbose=false){
-    VERBOSE = verbose;
-    // Create the DB object
-    let thedb = new GraphDB(dbn);
-    if (VERBOSE) console.log(erase);
-    // file management
-    try {
-        if ((!(fs.existsSync(thedb.dbnodes))) || erase) {
-            if (VERBOSE)
-                console.log("Creating nodes file: " + thedb.dbnodes);
-            fs.writeFileSync(thedb.dbnodes, JSON.stringify(INIT_NODES));
-        }
-        else
-            if (VERBOSE)
-                console.log("File exists: " + thedb.dbnodes);
-        if ((!(fs.existsSync(thedb.dbrels))) || erase) {
-            if (VERBOSE)
-                console.log("Creating rels file: " + thedb.dbrels);
-            fs.writeFileSync(thedb.dbrels, JSON.stringify(INIT_RELS));
-        }
-        else
-            if (VERBOSE) console.log("file exists: " + thedb.dbrels);
-        // nodes management
-        if (VERBOSE)
-            console.log("Loading nodes file: " + thedb.dbnodes);
-        thedb.initNodes(JSON.parse(fs.readFileSync(thedb.dbnodes, 'utf8')));
-        if (VERBOSE)
-            console.log("Loading rels file: " + thedb.dbrels);
-        thedb.initRels (JSON.parse(fs.readFileSync(thedb.dbrels,  'utf8')));
-    }
-    catch(err){
-        console.error(err);
-    }
-    return thedb;
-}
-
-
 /*=======================================
  * Exports
  *=======================================*/
 module.exports = {
-    initDatabase: initDatabase,
     GraphDB: GraphDB,
 }
 
