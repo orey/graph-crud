@@ -47,9 +47,9 @@ function getDateMilli(){
 }
 
 
-function toDateTime(secs) {
+function toDateTime(millisecs) {
     var t = new Date(1970, 0, 1); // Epoch
-    t.setSeconds(secs);
+    t.setSeconds(Math.round(millisecs/1000));
     return t;
 }
 
@@ -235,12 +235,22 @@ GraphDB.prototype.writeDB = function (){
  * HTML displays
  *=======================================*/
 
+function NodeHeader(){
+    return "<tr>"
+        + "<th><b>ID</b></td>"
+        + "<th><b>User</b></td>"
+        + "<th><b>Creation date</b></td>"
+        + "<th><b>Object</b></td>"
+        + "</tr>\n";
+}
+
 function Node2HTML(node) {
-    return "<p>ID: " + node.id
-        + " | user: " + node.user
-        + " | creation date: " + toDateTime(node.date)
-        + " | object: " + node.obj
-        + "</p>\n";
+    return "<tr>"
+        + "<td>ID: " + node.id + "</td>"
+        + "<td> | user: " + node.user + "</td>"
+        + "<td> | creation date: " + toDateTime(node.date) + "</td>"
+        + "<td> | object: " + node.obj + "</td>"
+        + "</tr>\n";
 };
 
 
@@ -257,7 +267,10 @@ function Rel2HTML(rel) {
 
 function GraphDB2HTML(db) {
     let output = "<h2>Nodes</h2>\n";
+    output += "<table>\n";
+    output += NodeHeader();
     db.nodes.forEach( item => { output += Node2HTML(item); });
+    output += "</table>";
     output    += "<h2>Relationships</h2>\n";
     db.rels.forEach ( item => { output += Rel2HTML(item); });
     return output;
