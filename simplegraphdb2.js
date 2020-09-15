@@ -18,6 +18,8 @@ const fs = require('fs');
 //Constants
 const NODES = '_nodes.json';
 const RELS  = '_rels.json';
+const PRESENT = 'P';
+const PAST    = 'A';
 
 const INIT_NODES = [{ system: "init node"}];
 const INIT_RELS  = [{ system: "init rel" }];
@@ -91,15 +93,20 @@ function recalculateIndex(array, mymap){
  *=======================================*/
 
 class Node {
-    constructor(user, obj, type="Node") {
+    constructor(user, obj, type="Node", version=1, past=false, base = PRESENT) {
+        // technical fields for cloning
+        this.aid     = uuidv4();
+        this.version = version;
+        this.past    = past;
+        this.base    = base;
+        // user accesible fields
         this.id   = uuidv4();
         this.user = user;
         this.date = getDateMilli();
         // the original object is contained into the technical DB object
-        // This lets the capacity to enrich technical data
+        // this lets the capacity to enrich technical data
         this.obj  = obj;
-        this.type = Node;
-        this.version = 1;
+        this.type = type;
     }
 
     /*
@@ -107,8 +114,11 @@ class Node {
      */
     clone() {
         return new Node(this.user,
-                        JSON.parse(JSON.stringify(this.oj)),
-                        this.type);
+                        JSON.parse(JSON.stringify(this.obj)),
+                        this.type,
+                        this.version,
+                        this.past,
+                        this.base);
     }
 
 };
@@ -116,33 +126,68 @@ class Node {
 
 /*------------------------------------*/
 
-class Rel {
-    constructor(user, source, dest, obj, type="Rel") {
-        this.id   = uuidv4();
-        this.user = user;
-        this.date = getDateMilli();
-        this.obj = obj;
-        // TODO: control if source and target ID are existing
-        this.source = source;
-        this.dest = dest;
-        this.type = type;
-        this.version = 1;
+class Rel extends Node {
+    // source and dest are nodes
+    constructor(user, source, dest, obj, type="Rel", version = 1, past=false, base = PRESENT) {
+        super(user, obj, type, version, past);
+        if ((!(source instanceof Node)) || (!(dest instanceof Node)))
+            throw new Error("Object is not a Node");
+        // viewable by the user
+        this.sourceid  = source.id;
+        this.destid    = dest.id;
+        // technical ids
+        this.asourceid = source.aid;
+        this.adestid   = dest.aid;
     }
 };
 
-/*------------------------------------*/
+/*
+ * This class determines a neighborhood _in the standard DB_ only
+ */
 
 class Neighborhood {
-    constructor(nodeid, rels) {
+    /* 
+     * Real neighborhood based on real aid.
+     * Consequence, we can get several versions of the same rels pointing
+     * if we request on the archive DB.
+     * Only one is past=false.
+     */
+    constructor(root, rels) {
+        this.root = root;
+        //arrays of rels
         this.incoming = [];
         this.outgoing = [];
         rels.forEach((item) => {
             let id = item.target;
-            if (id == nodeid)
-                this.incoming.push(id);
+            if (id == root.aid)
+                this.incoming.push(item);
             id = item.source;
-            if (id == nodeid)
-                this.outgoing.push(id);
+            if (id == root.aid)
+                this.outgoing.push(item);
+        });
+    }
+
+
+    /*
+     * Should be done on active nodes only
+     * Not any sense in other cases
+     */
+    clone(user) {
+        if (node.past)
+            throw new Error("Archived node cannot be cloned");
+        // clone the node
+        let newnode = node.clone();
+        newnode.id = node.id; //invisible for the user, this is a new version
+        newnode.version = node.version++;
+        newnode.past = false;
+        newnode.base = PRESENT;
+        let previousnode = new Rel(user, newnode.aid, node.aid, {}
+        // theoretically, all olds rels are archived
+        incoming.forEach((rel) => {
+            if (rel.past)
+                throw new Error("Archived rel should not be in neighborhood");
+            // reprendre ici
+                
         });
     }
 }
