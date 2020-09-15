@@ -90,145 +90,181 @@ function recalculateIndex(array, mymap){
  * Node and Rel objects
  *=======================================*/
 
-function Node(user, obj) {
-    this.id   = uuidv4();
-    this.user = user;
-    this.date = getDateMilli();
-    // the original object is contained into the technical DB object
-    // This lets the capacity to enrich technical data
-    this.obj  = obj;
+class Node {
+    constructor(user, obj, type="Node") {
+        this.id   = uuidv4();
+        this.user = user;
+        this.date = getDateMilli();
+        // the original object is contained into the technical DB object
+        // This lets the capacity to enrich technical data
+        this.obj  = obj;
+        this.type = Node;
+        this.version = 1;
+    }
+
+    /*
+     * Warning: This brutal clone will only clone data
+     */
+    clone() {
+        return new Node(this.user,
+                        JSON.parse(JSON.stringify(this.oj)),
+                        this.type);
+    }
+
 };
 
-
-Node.prototype.getId = () => { return this.id; };
 
 /*------------------------------------*/
 
-function Rel(user, source, dest, obj) {
-    this.id   = uuidv4();
-    this.user = user;
-    this.date = getDateMilli();
-    this.obj = obj;
-    // TODO: control if source and target ID are existing
-    this.source = source;
-    this.dest = dest;
+class Rel {
+    constructor(user, source, dest, obj, type="Rel") {
+        this.id   = uuidv4();
+        this.user = user;
+        this.date = getDateMilli();
+        this.obj = obj;
+        // TODO: control if source and target ID are existing
+        this.source = source;
+        this.dest = dest;
+        this.type = type;
+        this.version = 1;
+    }
 };
 
-//Should be inheritated
-Rel.prototype.getId = () => { return this.id; };
+/*------------------------------------*/
+
+class Neighborhood {
+    constructor(nodeid, rels) {
+        this.incoming = [];
+        this.outgoing = [];
+        rels.forEach((item) => {
+            let id = item.target;
+            if (id == nodeid)
+                this.incoming.push(id);
+            id = item.source;
+            if (id == nodeid)
+                this.outgoing.push(id);
+        });
+    }
+}
+
 
 
 /*=======================================
  * GraphDB object
  *=======================================*/
 
-/*
- * Constructor
- */
-function GraphDB(dbname, erase=false,verbose=false) {
-    VERBOSE = verbose;
-    // files
-    this.dbname = dbname;
-    // creating complete filenames
-    this.dbnodes = __dirname + '/db/' + dbname + NODES;
-    //if (VERBOSE) console.log("dbnodes: " + this.dbnodes);
-    this.dbrels  = __dirname + '/db/' + dbname + RELS;
-    //if (VERBOSE) console.log("dbrels: " + this.dbrels);
-    // arrays of nodes and rels
-    this.nodes = [];
-    this.rels = [];
-    // init indexes
-    this.nodesIndex = new Map();
-    this.relsIndex = new Map();
-    // file management
-    try {
-        // create new DB
-        if ((!(fs.existsSync(this.dbnodes))) || erase) {
-            if (VERBOSE)
-                console.log("Creating nodes file: " + this.dbnodes);
-            fs.writeFileSync(this.dbnodes, JSON.stringify(INIT_NODES));
+class GraphDB {
+    constructor(dbname, erase=false,verbose=false) {
+        VERBOSE = verbose;
+        // files
+        this.dbname = dbname;
+        // creating complete filenames
+        this.dbnodes = __dirname + '/db/' + dbname + NODES;
+        //if (VERBOSE) console.log("dbnodes: " + this.dbnodes);
+        this.dbrels  = __dirname + '/db/' + dbname + RELS;
+        //if (VERBOSE) console.log("dbrels: " + this.dbrels);
+        // arrays of nodes and rels
+        this.nodes = [];
+        this.rels = [];
+        // init indexes
+        this.nodesIndex = new Map();
+        this.relsIndex = new Map();
+        // file management
+        try {
+            // create new DB
+            if ((!(fs.existsSync(this.dbnodes))) || erase) {
+                if (VERBOSE)
+                    console.log("Creating nodes file: " + this.dbnodes);
+                fs.writeFileSync(this.dbnodes, JSON.stringify(INIT_NODES));
+            }
+            else
+                if (VERBOSE)
+                    console.log("File exists: " + this.dbnodes);
+            if ((!(fs.existsSync(this.dbrels))) || erase) {
+                if (VERBOSE)
+                    console.log("Creating rels file: " + this.dbrels);
+                fs.writeFileSync(this.dbrels, JSON.stringify(INIT_RELS));
+            }
+            else
+                if (VERBOSE) console.log("file exists: " + this.dbrels);
         }
-        else
-            if (VERBOSE)
-                console.log("File exists: " + this.dbnodes);
-        if ((!(fs.existsSync(this.dbrels))) || erase) {
-            if (VERBOSE)
-                console.log("Creating rels file: " + this.dbrels);
-            fs.writeFileSync(this.dbrels, JSON.stringify(INIT_RELS));
+        catch(err){
+            console.error(err);
         }
-        else
-            if (VERBOSE) console.log("file exists: " + this.dbrels);
+        // nodes management
+        if (VERBOSE)
+            console.log("Loading nodes file: " + this.dbnodes);
+        this.nodes = JSON.parse(fs.readFileSync(this.dbnodes, 'utf8'));
+        this.nodesIndex = recalculateIndex(this.nodes, this.nodesIndex);
+        
+        if (VERBOSE)
+            console.log("Loading rels file: " + this.dbrels);
+        this.rels = JSON.parse(fs.readFileSync(this.dbrels,  'utf8'));
+        this.relsIndex = recalculateIndex(this.rels, this.relsIndex);
     }
-    catch(err){
-        console.error(err);
-    }   
-    // nodes management
-    if (VERBOSE)
-        console.log("Loading nodes file: " + this.dbnodes);
-    this.nodes = JSON.parse(fs.readFileSync(this.dbnodes, 'utf8'));
-    this.nodesIndex = recalculateIndex(this.nodes, this.nodesIndex);
 
-    if (VERBOSE)
-        console.log("Loading rels file: " + this.dbrels);
-    this.rels = JSON.parse(fs.readFileSync(this.dbrels,  'utf8'));
-    this.relsIndex = recalculateIndex(this.rels, this.relsIndex);
-}
-
-
-GraphDB.prototype.checkId  = (id) => {
-    if (VERBOSE)
-        console.log(this);
-    return id in this.nodesIndex.keys;
-};
-
-
-GraphDB.prototype.addNode = function(user, obj) {
-    // adding technical info to node
-    let node = new Node(user,obj);
-    this.nodes.push(node);
-    if (VERBOSE) console.log("Nb of nodes in memory: "+ this.nodes.length);
-    //recalculate index
-    this.nodesIndex = recalculateIndex(this.nodes, this.nodesIndex);
-    //returning node
-    return node.id;
-};
-
-
-/*
- * En chantier
- */
-GraphDB.prototype.updateNode = function(gid, user) {
-    // getting node from index
-    let node = this.nodesIndex.get(gid);
-    if (node == undefined)
-        throw new Error ("Unknown node. id = " + gid);
-    // reprendre ici
     
-};
-
-
-GraphDB.prototype.addRel = function (user, source, target, relatt){
-    // creating rel
-    if ((!this.nodesIndex.has(source)) || (!this.nodesIndex.has(target)))
-        throw new Error ("Source or destination Id does not exist.");
-    let rel = new Rel(user, source, target, relatt);
-    //adding rel to rels
-    this.rels.push(rel);
-    //recalculate index
-    recalculateIndex(this.rels, this.relsIndex);
-    return rel.id;
-};
-
-
-GraphDB.prototype.writeDB = function (){
-    try {
-        fs.writeFileSync(this.dbnodes, JSON.stringify(this.nodes));
-        fs.writeFileSync(this.dbrels,  JSON.stringify(this.rels));
+    checkId(id) {
+        if (VERBOSE)
+            console.log(this);
+        return id in this.nodesIndex.keys;
     }
-    catch(err) {
-        console.error(err);
+
+
+    addNode(user, obj) {
+        // adding technical info to node
+        let node = new Node(user,obj);
+        this.nodes.push(node);
+        if (VERBOSE) console.log("Nb of nodes in memory: "+ this.nodes.length);
+        //recalculate index
+        this.nodesIndex = recalculateIndex(this.nodes, this.nodesIndex);
+        //returning node
+        return node.id;
     }
-};
+
+
+    getNeighborhood(nodeid) {
+        return new Neighborhood(nodeid, this.rels);
+    }
+
+    
+    /*
+     * En chantier
+     */
+    updateNode(user, id, newobj) {
+        // getting node from index
+        let node = this.nodesIndex.get(id);
+        if (node == undefined)
+            throw new Error ("Unknown node. id = " + id);
+        // pumping the node version
+        node.version += 1;
+        
+    }
+
+
+    addRel(user, source, target, relatt){
+        // creating rel
+        if ((!this.nodesIndex.has(source)) || (!this.nodesIndex.has(target)))
+            throw new Error ("Source or destination Id does not exist.");
+        let rel = new Rel(user, source, target, relatt);
+        //adding rel to rels
+        this.rels.push(rel);
+        //recalculate index
+        recalculateIndex(this.rels, this.relsIndex);
+        return rel.id;
+    }
+
+
+    writeDB(){
+        try {
+            fs.writeFileSync(this.dbnodes, JSON.stringify(this.nodes));
+            fs.writeFileSync(this.dbrels,  JSON.stringify(this.rels));
+        }
+        catch(err) {
+            console.error(err);
+        }
+    }
+}
 
 
 /*=======================================
@@ -283,6 +319,8 @@ function GraphDB2HTML(db) {
 module.exports = {
     GraphDB: GraphDB,
     GraphDB2HTML: GraphDB2HTML,
+    Node: Node,
+    Rel: Rel,
 }
 
 
