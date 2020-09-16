@@ -111,6 +111,7 @@ class Node {
 
     /*
      * Warning: This brutal clone will only clone data
+     * If obj contains something else, only data will be taken
      */
     clone() {
         return new Node(this.user,
@@ -139,12 +140,43 @@ class Rel extends Node {
         this.asourceid = source.aid;
         this.adestid   = dest.aid;
     }
+
 };
+
+
+/*
+ * This function takes 2 standard nodes and gathers the business rules
+ * of archiving.
+ */
+function archiveNode(user, oldnode){
+    // standard cloning of the oldnode
+    let newnode = oldnode.clone();
+    // the newnode has the same id that the old node
+    newnode.id = oldnode.id; 
+    newnode.version = oldnode.version++;
+    newnode.past = false;
+    newnode.base = PRESENT;
+    // the oldnode must be modified
+    oldnode.past = true;
+    oldnode.base = PAST;
+    // create the relationship
+    let rel = new Rel(user, newnode, oldnode,"PREVIOUS", 1, true, PAST);
+
+    let vois = new Neighborhood(oldnode);
+    vois.incoming.forEach(() => {
+        // reprendre ici
+    });
+    
+
+
+    // newnode will be stored in the PRESENT db and rel in PAST
+    return [newnode, rel];
+}
+
 
 /*
  * This class determines a neighborhood _in the standard DB_ only
  */
-
 class Neighborhood {
     /* 
      * Real neighborhood based on real aid.
@@ -185,7 +217,7 @@ class Neighborhood {
         // theoretically, all olds rels are archived
         incoming.forEach((rel) => {
             if (rel.past)
-                throw new Error("Archived rel should not be in neighborhood");
+                throw new Error("Archived rel should not be in neighborhood of a present node");
             // reprendre ici
                 
         });
