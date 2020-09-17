@@ -24,6 +24,9 @@ const PAST    = 'A';
 const INIT_NODES = [{ system: "init node"}];
 const INIT_RELS  = [{ system: "init rel" }];
 
+const PREVIOUS_NODE = { system: "PREVN"};
+const PREVIOUS_REL = { system: "PREVR"};
+
 const NOT_A_NODE = "Source object is not a node (missing id). Not written.";
 
 let VERBOSE = false;
@@ -112,6 +115,7 @@ class Node {
     /*
      * Warning: This brutal clone will only clone data
      * If obj contains something else, only data will be taken
+     * This clone method has no business rule attached
      */
     clone() {
         return new Node(this.user,
@@ -141,6 +145,22 @@ class Rel extends Node {
         this.adestid   = dest.aid;
     }
 
+    /*
+     * Warning: This brutal clone will only clone data
+     * If obj contains something else, only data will be taken
+     * This clone method has no business rule attached
+     */
+    clone() {
+        return new Rel(this.user,
+                       this.source,
+                       this.dest,
+                       JSON.parse(JSON.stringify(this.obj)),
+                       this.type,
+                       this.version,
+                       this.past,
+                       this.base);
+    }
+
 };
 
 
@@ -148,7 +168,7 @@ class Rel extends Node {
  * This function takes 2 standard nodes and gathers the business rules
  * of archiving.
  */
-function archiveNode(user, oldnode){
+function updateNode(user, oldnode){
     // standard cloning of the oldnode
     let newnode = oldnode.clone();
     // the newnode has the same id that the old node
@@ -156,15 +176,40 @@ function archiveNode(user, oldnode){
     newnode.version = oldnode.version++;
     newnode.past = false;
     newnode.base = PRESENT;
-    // the oldnode must be modified
+    // the oldnode must be modified to be stored in the past
     oldnode.past = true;
     oldnode.base = PAST;
-    // create the relationship
-    let rel = new Rel(user, newnode, oldnode,"PREVIOUS", 1, true, PAST);
-
+    // create the relationship between the new node and the old node
+    let rel = new Rel(user, newnode, oldnode,PREVIOUS_NODE, 1, true, PAST);
+    // getting the neighborhood of old node in oredr to rewire the new node
     let vois = new Neighborhood(oldnode);
-    vois.incoming.forEach(() => {
-        // reprendre ici
+    vois.incoming.forEach((obj) => {
+        let oldrel = obj.rel;
+        if (!(oldrel instance of Rel))
+            thrown new Error("Old rel should be a Rel.");
+        let newrel = oldrel.clone();
+        newrel.id = oldrel.id;
+        newrel.version = oldrel.version++;
+        newrel.past = false;
+        newrel.base = PRESENT;
+        newrel.adestid = oldrel.adestid;
+        // updating old rel
+        oldrel.past = true;
+        oldrel.base = PAST;
+    });
+    vois.outgoing.forEach((obj) => {
+        let oldrel = obj.rel;
+        if (!(oldrel instance of Rel))
+            thrown new Error("Old rel should be a Rel.");
+        let newrel = oldrel.clone();
+        newrel.id = oldrel.id;
+        newrel.version = oldrel.version++;
+        newrel.past = false;
+        newrel.base = PRESENT;
+        newrel.asourceid = oldrel.asourceid;
+        // updating old rel
+        oldrel.past = true;
+        oldrel.base = PAST;
     });
     
 
@@ -186,16 +231,17 @@ class Neighborhood {
      */
     constructor(root, rels) {
         this.root = root;
-        //arrays of rels
+        //list of {node, rel} objects
         this.incoming = [];
+        //list of {rel, node} objects
         this.outgoing = [];
         rels.forEach((item) => {
             let id = item.target;
             if (id == root.aid)
-                this.incoming.push(item);
+                this.incoming.push({node: item.source, rel:item});
             id = item.source;
             if (id == root.aid)
-                this.outgoing.push(item);
+                this.outgoing.push({rel:item, node:item.target});
         });
     }
 
