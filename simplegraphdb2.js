@@ -95,17 +95,30 @@ function recalculateIndex(array, mymap){
  * Node and Rel objects
  *=======================================*/
 
-class Node {
-    constructor(user, obj, type="Node", version=1, past=false, base = PRESENT) {
+/*
+ * Technical class to manage archives
+ */
+class Archive {
+    constructor(version, past, base){
         // technical fields for cloning
         this.aid     = uuidv4();
         this.version = version;
         this.past    = past;
         this.base    = base;
+    }
+}
+
+
+/*------------------------------------*/
+
+class Node {
+    constructor(user, obj, type="Node", version=1, past=false, base = PRESENT) {
         // user accesible fields
         this.id   = uuidv4();
         this.user = user;
         this.date = getDateMilli();
+        // plan slot for potential archive data
+        this.archive = {};
         // the original object is contained into the technical DB object
         // this lets the capacity to enrich technical data
         this.obj  = obj;
@@ -292,6 +305,8 @@ class GraphDB {
         // init indexes
         this.nodesIndex = new Map();
         this.relsIndex = new Map();
+        // autocommit must be set separately
+        this.autocommit = false;
         // file management
         try {
             // create new DB
@@ -326,6 +341,10 @@ class GraphDB {
         this.relsIndex = recalculateIndex(this.rels, this.relsIndex);
     }
 
+    autocommit() {
+        this.autocommit = true;
+    }
+
     
     checkId(id) {
         if (VERBOSE)
@@ -341,6 +360,9 @@ class GraphDB {
         if (VERBOSE) console.log("Nb of nodes in memory: "+ this.nodes.length);
         //recalculate index
         this.nodesIndex = recalculateIndex(this.nodes, this.nodesIndex);
+        // autocommit management
+        if (this.autocommit)
+            this.writeDB()
         //returning node
         return node.id;
     }
@@ -374,6 +396,9 @@ class GraphDB {
         this.rels.push(rel);
         //recalculate index
         recalculateIndex(this.rels, this.relsIndex);
+        // autocommit management
+        if (this.autocommit)
+            this.writeDB()
         return rel.id;
     }
 
