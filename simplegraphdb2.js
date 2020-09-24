@@ -95,48 +95,45 @@ function recalculateIndex(array, mymap){
  * Node and Rel objects
  *=======================================*/
 
-/*
- * Technical class to manage archives
- */
-class Archive {
-    constructor(version, past, base){
-        // technical fields for cloning
-        this.aid     = uuidv4();
-        this.version = version;
-        this.past    = past;
-        this.base    = base;
-    }
-}
-
-
-/*------------------------------------*/
-
 class Node {
-    constructor(user, obj, type="Node", version=1, past=false, base = PRESENT) {
+    /*
+     * The constructor is used for new nodes. So assumptions are made on default values
+     */
+    constructor(user, obj, type="Node") {
+        // technical fields for cloning
+        this.aid     = uuidv4(); // this is the absolute id of the node
+        this.version = 1;
+        this.past    = false;
         // user accesible fields
-        this.id   = uuidv4();
+        this.id   = this.aid
         this.user = user;
         this.date = getDateMilli();
-        // plan slot for potential archive data
-        this.archive = {};
         // the original object is contained into the technical DB object
         // this lets the capacity to enrich technical data
         this.obj  = obj;
-        this.type = type;
+        this.type = type; // Type is an optional label
     }
 
-    /*
-     * Warning: This brutal clone will only clone data
-     * If obj contains something else, only data will be taken
-     * This clone method has no business rule attached
-     */
-    clone() {
+    // Brutal clone method
+    clone(){
         return new Node(this.user,
                         JSON.parse(JSON.stringify(this.obj)),
-                        this.type,
-                        this.version,
-                        this.past,
-                        this.base);
+                        this.type);
+    }
+    
+    /*
+     * This method acts as a specific kind of factory playing with IDs
+     * In terms of data, the clone brutally clones the user data (obj)
+     */
+    cloneAndLink() {
+        let newnode = new Node(this.user,
+                               JSON.parse(JSON.stringify(this.obj)),
+                               this.type);
+        // the clone has the public id of the father, but the aid stays unique
+        newnode.id      = this.id;
+        newnode.version = this.version + 1;
+        this.past       = true;
+        return newnode;
     }
 
 };
