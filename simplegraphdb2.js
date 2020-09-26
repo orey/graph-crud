@@ -21,6 +21,8 @@ const RELS  = '_rels.json';
 const PRESENT = 'P';
 const PAST    = 'A';
 
+const INIT_DB = [{ system: "DBStorage", version: 1}];
+
 const INIT_NODES = [{ system: "init node"}];
 const INIT_RELS  = [{ system: "init rel" }];
 
@@ -28,6 +30,8 @@ const PREVIOUS_NODE = { system: "PREVN"};
 const PREVIOUS_REL = { system: "PREVR"};
 
 const NOT_A_NODE = "Source object is not a node (missing id). Not written.";
+
+const PREVIOUS = "PREVIOUS";
 
 let VERBOSE = false;
 
@@ -90,6 +94,40 @@ function recalculateIndex(array, mymap){
     return mymap;
 }
 
+/*=======================================
+ * Index object
+ *=======================================*/
+class Index {
+    constructor(key) {
+        this.key = key;
+        this.map = new Map();
+    }
+
+    /*
+     * elem is an object having a field which name is stored in key
+     */
+    addElement(elem) {
+        if (this.key in elem)
+            map.set(item[this.key], elem);
+        else
+            console.warn("Object that does not have key: %s. Not indexed.", this.key);
+    }
+
+    /*
+     * key can be not in index, the result is 'undefined'
+     */
+    getElement(key) {
+        return this.map.get(key);
+    }
+
+    removeElement(key) {
+        if (this.map.has(key))
+            this.map.delete(key);
+        else
+            console.warn("Object is not in index: %s. Not removed.", key);
+    }
+}
+
 
 /*=======================================
  * Node and Rel objects
@@ -98,6 +136,7 @@ function recalculateIndex(array, mymap){
 class Node {
     /*
      * The constructor is used for new nodes. So assumptions are made on default values
+     * "aid" is the absolute identifier
      */
     constructor(user, obj, type="Node") {
         // technical fields for cloning
@@ -114,13 +153,6 @@ class Node {
         this.type = type; // Type is an optional label
     }
 
-    // Brutal clone method
-    clone(){
-        return new Node(this.user,
-                        JSON.parse(JSON.stringify(this.obj)),
-                        this.type);
-    }
-    
     /*
      * This method acts as a specific kind of factory playing with IDs
      * In terms of data, the clone brutally clones the user data (obj)
@@ -143,32 +175,65 @@ class Node {
 
 class Rel extends Node {
     // source and dest are nodes
-    constructor(user, source, dest, obj, type="Rel", version = 1, past=false, base = PRESENT) {
-        super(user, obj, type, version, past);
+    constructor(user, source, dest, obj, type="Rel") {
+        super(user, obj, type);
         if ((!(source instanceof Node)) || (!(dest instanceof Node)))
             throw new Error("Object is not a Node");
         // viewable by the user
         this.sourceid  = source.id;
         this.destid    = dest.id;
         // technical ids
-        this.asourceid = source.aid;
-        this.adestid   = dest.aid;
+        this.sourceaid = source.aid;
+        this.destaid   = dest.aid;
     }
 
     /*
-     * Warning: This brutal clone will only clone data
-     * If obj contains something else, only data will be taken
-     * This clone method has no business rule attached
+     * Rewiring method
      */
-    clone() {
-        return new Rel(this.user,
-                       this.source,
-                       this.dest,
-                       JSON.parse(JSON.stringify(this.obj)),
-                       this.type,
-                       this.version,
-                       this.past,
-                       this.base);
+    cloneAndLink(newnode, source=true) {
+        let newrel = undefined;
+        if (!(newnode instanceof Node))
+            throw new Error("Object is not a Node");
+        if (source) {
+            newrel = new Rel(this.user,
+                             newnode,
+                             this.dest,
+                             JSON.parse(JSON.stringify(this.obj)),
+                             this.type);
+            // define new rel as a new version of rel, keeping the same id
+            newrel.id = this.id;
+            newrel.version = this.version +1;
+            this.past = true;
+            // sourceid and destid are not changing for newrel
+            newrel.sourceaid = newnode.aid
+            // destaid has not changed
+        }
+        // source = false, newnode is a new dest node
+        else {
+            newrel = new Rel(this.user,
+                             this.source,
+                             newnode,
+                             JSON.parse(JSON.stringify(this.obj)),
+                             this.type);
+            // define new rel as a new version of rel, keeping the same id
+            newrel.id = this.id;
+            newrel.version = this.version +1;
+            this.past = true;
+            // sourceid and destid are not changing for newrel
+            newrel.destaid = newnode.aid
+            // sourceaid has not changed
+        }
+        return newrel;
+    }
+
+    /*
+     * This method can be useful in the future to attach specific semantics (obj)
+     * to the PREVIOUS relationship
+     */
+    createPreviousRel(user, oldnode, newnode) {
+        if ((!(oldnode instanceof Node)) || (!(newnode instanceof Node)))
+            throw new Error("Object is not a Node");
+        return new Rel (user, newnode, oldnode, {}, PREVIOUS);
     }
 
 };
@@ -234,7 +299,7 @@ function updateNode(user, oldnode){
  */
 class Neighborhood {
     /* 
-     * Real neighborhood based on real aid.
+     * Real neighborhood based on "aid" member, the absolute identifier.
      * Consequence, we can get several versions of the same rels pointing
      * if we request on the archive DB.
      * Only one is past=false.
@@ -269,15 +334,109 @@ class Neighborhood {
         newnode.version = node.version++;
         newnode.past = false;
         newnode.base = PRESENT;
-        let previousnode = new Rel(user, newnode.aid, node.aid, {}
+        let previousnode = new Rel(user, newnode.aid, node.aid, {});
         // theoretically, all olds rels are archived
         incoming.forEach((rel) => {
             if (rel.past)
                 throw new Error("Archived rel should not be in neighborhood of a present node");
             // reprendre ici
-                
         });
     }
+    
+}
+
+
+/*=======================================
+ * DBStorage object
+ * DBStorage stores lists of objects
+ *=======================================*/
+class DBStorage {
+    dnbame  = "";
+    dbfile = "";
+    dbcontent = {};
+
+    /*
+     * Constructor just initialize the DB with a list with one object
+     */
+    constructor(dbname, location= "/db/", erase=false) {
+        // files
+        this.dbname = dbname;
+        // creating complete filenames
+        this.dbfile = __dirname + location + dbname;
+        if (VERBOSE)
+            console.log("dbfile: " + this.dbdbfile);
+        // file management
+        try {
+            // create new DB
+            if (!(fs.existsSync(this.dbfile))) {
+                if (VERBOSE)
+                    console.log("Create DB %s with file %s", this.dbname, this.dbfile);
+                fs.writeFileSync(this.dbfile, JSON.stringify(INIT_DB));
+                return;
+            }
+            // same as above with erase
+            if (erase) {
+                if (!(fs.existsSync(this.dbfile))) {
+                    console.info("DB file %s not existing. Creating", this.dbfile);
+                }
+                if (VERBOSE)
+                    console.log("Create DB %s with file %s", this.dbname, this.dbfile);
+                fs.writeFileSync(this.dbfile, JSON.stringify(INIT_DB));
+                return;
+            }
+            if (VERBOSE)
+                console.log("DB exists: " + this.dbfile);
+        }
+        catch(err){
+            console.error(err);
+        }
+    }
+
+    addObject(obj){
+        try {
+            this.dbcontent = JSON.parse(fs.readFileSync(this.dbfile, 'utf8'));
+            this.dbcontent.push(obj);
+            fs.writeFileSync(this.dbfile, JSON.stringify(this.dbcontent));
+        }
+        catch(err){
+            console.error(err);
+        }
+    }
+}
+
+
+/*=======================================
+ * SimpleGraphDB
+ *=======================================*/
+class SimpleGraphDB {
+    dbnodesfile = "";
+    dbrelsfile  = "";
+
+    nodestorage = undefined;
+    relstorage  = undefined;
+    
+    dbnodes = [];
+    dbrels  = [];
+    autocommit = true;
+
+    anodesindex = new Index("aid");
+    arelsindex  = new Index("aid");
+    nodesindes  = new Index("id");
+    relsindex   = new Index("aid"); 
+    
+    constructor(dbname, erase=false) {
+        this.dbnodesfile = dbname + NODES;
+        this.dbrelsfile  = dbname + RELS;
+        this.nodestorage = new DBStorage(this.dbnodesfile, erase);
+        this.relstorage  = new DBStorage(this.dbrelsfile,  erase);
+        anodesindex = new Index("aid");
+        arelsindex  = new Index("aid");
+        nodesindes  = new Index("id");
+        relsindex   = new Index("aid"); 
+
+    }
+
+
 }
 
 
@@ -462,6 +621,7 @@ function GraphDB2HTML(db) {
  * Exports
  *=======================================*/
 module.exports = {
+    VERBOSE: VERBOSE,
     GraphDB: GraphDB,
     GraphDB2HTML: GraphDB2HTML,
     Node: Node,

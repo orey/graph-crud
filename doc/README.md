@@ -1,5 +1,9 @@
 # Design indications
 
+## Concept
+
+![Photo](photo.jpg)
+
 ## Overview
 
 ![Design](design.png)
