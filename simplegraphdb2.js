@@ -21,6 +21,8 @@ const RELS  = '_rels.json';
 const PRESENT = 'P';
 const PAST    = 'A';
 
+const SYSTEM_HEADER = { system: "DBStorage", version: 1};
+
 const INIT_DB = [{ system: "DBStorage", version: 1}];
 
 const INIT_NODES = [{ system: "init node"}];
@@ -98,9 +100,17 @@ function recalculateIndex(array, mymap){
  * Index object
  *=======================================*/
 class Index {
-    constructor(key) {
+    /*
+     * initarray is an array of objects that is used to initialize
+     * the index with something (for instance a loaded DB)
+     */
+    constructor(key, initarray=[]) {
         this.key = key;
         this.map = new Map();
+        if ((initarray == undefined) || (initarray == []))
+            return;
+        else 
+            initarray.forEach( elem => this.addElement(elem); });
     }
 
     /*
@@ -353,10 +363,11 @@ class Neighborhood {
 class DBStorage {
     dnbame  = "";
     dbfile = "";
-    dbcontent = {};
+    dbcontent = [];
 
     /*
-     * Constructor just initialize the DB with a list with one object
+     * Constructor or loads and existing database
+     * or initialize it
      */
     constructor(dbname, location= "/db/", erase=false) {
         // files
@@ -366,30 +377,37 @@ class DBStorage {
         if (VERBOSE)
             console.log("dbfile: " + this.dbdbfile);
         // file management
+        let create = false;
+        let existing = false;
         try {
             // create new DB
             if (!(fs.existsSync(this.dbfile))) {
-                if (VERBOSE)
-                    console.log("Create DB %s with file %s", this.dbname, this.dbfile);
-                fs.writeFileSync(this.dbfile, JSON.stringify(INIT_DB));
-                return;
+                console.info("Create DB %s with file %s", this.dbname, this.dbfile);
+                create = true;
             }
-            // same as above with erase
+            else
+                existing = true;
             if (erase) {
-                if (!(fs.existsSync(this.dbfile))) {
-                    console.info("DB file %s not existing. Creating", this.dbfile);
-                }
-                if (VERBOSE)
-                    console.log("Create DB %s with file %s", this.dbname, this.dbfile);
-                fs.writeFileSync(this.dbfile, JSON.stringify(INIT_DB));
+                if (existing)
+                    console.info("Erasing DB %s with file %s", this.dbname, this.dbfile);
+                create = true;
+            }
+            if (create) {
+                this.dbcontent = INIT_DB;
+                fs.writeFileSync(this.dbfile, JSON.stringify(this.dbcontent));
                 return;
             }
             if (VERBOSE)
                 console.log("DB exists: " + this.dbfile);
+            this.dbcontent = JSON.parse(fs.readFileSync(this.dbfile, 'utf8'));
         }
         catch(err){
             console.error(err);
         }
+    }
+
+    get dbcontent() {
+        return this.dbcontent;
     }
 
     addObject(obj){
@@ -425,16 +443,54 @@ class SimpleGraphDB {
     relsindex   = new Index("aid"); 
     
     constructor(dbname, erase=false) {
+        // building db file names
         this.dbnodesfile = dbname + NODES;
         this.dbrelsfile  = dbname + RELS;
+
+        //creating storage objects
         this.nodestorage = new DBStorage(this.dbnodesfile, erase);
         this.relstorage  = new DBStorage(this.dbrelsfile,  erase);
-        anodesindex = new Index("aid");
-        arelsindex  = new Index("aid");
-        nodesindes  = new Index("id");
-        relsindex   = new Index("aid"); 
 
+        // getting content if any
+        this.dbnodes = this.nodestorage.dbcontent;
+        this.dbrels = this.relstorage.dbcontent;
+
+        // creating absolute index
+        this.anodesindex = new Index("aid", this.dbnodes);
+        this.arelsindex  = new Index("aid", this.dbrels);
+        // creating user index
+        this.nodesindex  = new Index("id", this.dbnodes);
+        this.relsindex   = new Index("id", this.dbrels); 
     }
+
+    set autocommit(value) {
+        if (typeof value === "boolean")
+            this.autocommit = value;
+        else
+            console.warn("Bad autocommit value: " + value.toString());
+    }
+
+    addNode(user, node) {
+        if (!(node instanceof Node)) {
+            console.error("Provided object is not a node, doing nothing");
+            return;
+        }
+        this.dbnodes.push(node);
+
+        //recalculate index
+
+        // reprendre ici
+        
+/*        this.nodesIndex = recalculateIndex(this.nodes, this.nodesIndex);
+        // autocommit management
+        if (this.autocommit)
+            this.writeDB()
+        //returning node
+        return node.id; */
+    }
+        
+    
+    
 
 
 }
